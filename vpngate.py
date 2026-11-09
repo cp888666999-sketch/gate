@@ -560,6 +560,67 @@ def to_sstp_nodes(rows: Iterable[dict[str, Any]]) -> list[Node]:
     return nodes
 
 
+def parse_static_nodes(path: str) -> list[Node]:
+    """解析 static_nodes.txt 静态补充节点（实测过的重点节点，每次仍走实测，死节点自动不发布）。
+
+    每行格式（# 开头为注释，空行忽略）：
+        国家代码|主机|端口     例：US|vpn680288952.opengw.net|1243
+        sstp://链接           例：sstp://vpn:vpn@vpn680288952.opengw.net:1243
+    """
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+    except OSError:
+        return []
+    nodes: list[Node] = []
+    seen: set[tuple[str, int]] = set()
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        host = ""
+        port = 0
+        country_code = ""
+        if line.lower().startswith("sstp://"):
+            at = line.rfind("@")
+            target = line[at + 1:] if at != -1 else line[len("sstp://"):]
+            target = target.split("#", 1)[0].split("/", 1)[0]
+            host_part, _, port_part = target.rpartition(":")
+            host = host_part.strip().lower()
+            try:
+                port = int(port_part)
+            except ValueError:
+                continue
+        else:
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) < 3:
+                continue
+            country_code = parts[0].upper()
+            host = parts[1].lower()
+            try:
+                port = int(parts[2])
+            except ValueError:
+                continue
+        if not host or not 1 <= port <= 65535:
+            continue
+        key = (host, port)
+        if key in seen:
+            continue
+        seen.add(key)
+        nodes.append(
+            Node(
+                host=host,
+                port=port,
+                ip="",
+                country=COUNTRY_ZH.get(country_code, country_code or "未知"),
+                country_code=country_code or "??",
+            )
+        )
+    return nodes
+
+
 def dedupe_nodes(nodes: Iterable[Node]) -> list[Node]:
     seen: set[tuple[str, int]] = set()
     unique: list[Node] = []
@@ -937,17 +998,31 @@ def main() -> None:
     log("CONFIG", f"检测地址: {cfg.worker_base.rsplit('?', 1)[0]}?sstp=***")
     log("CONFIG", f"并发 {cfg.concurrency}, 单节点超时 {cfg.check_timeout}s, 整体截止 {cfg.deadline_s}s")
 
+    static_nodes = parse_static_nodes(os.path.join(REPO_DIR, "static_nodes.txt"))
+    if static_nodes:
+        log(
+            "STATIC",
+            f"静态补充节点 {len(static_nodes)} 个: "
+            + ", ".join(f"{n.country_code}:{n.host}:{n.port}" for n in static_nodes),
+        )
+
     rows, source = fetch_vpngate(cfg, session)
     raw_count = len(rows)
-    if raw_count == 0:
+    if raw_count == 0 and not static_nodes:
         die("VPN GATE", "VPN Gate 返回 0 个原始节点，拒绝生成空结果")
 
     sstp_nodes = to_sstp_nodes(rows)
     sstp_count = len(sstp_nodes)
-    if sstp_count == 0:
+    if sstp_count == 0 and not static_nodes:
         die("VPN GATE", f"从 {raw_count} 个原始节点中没有解析出任何 SSTP(TCP) 节点")
 
-    unique_nodes = prioritize(dedupe_nodes(sstp_nodes))
+    merged = dedupe_nodes(list(sstp_nodes) + static_nodes)
+    # 静态节点排前面：与动态节点重复时保留静态条目（静态节点经过人工筛选）
+    static_keys = {(n.host, n.port) for n in static_nodes}
+    unique_nodes = [n for n in merged if (n.host, n.port) in static_keys] + [
+        n for n in merged if (n.host, n.port) not in static_keys
+    ]
+    unique_nodes = prioritize(unique_nodes)
     if cfg.max_check_nodes > 0:
         unique_nodes = unique_nodes[: cfg.max_check_nodes]
 
