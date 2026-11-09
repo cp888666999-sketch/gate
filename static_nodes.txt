@@ -1,7 +1,11 @@
-# 静态补充节点：人工实测过的重点节点（美欧优先），每次运行仍会实测，死节点自动不发布。
+# 静态补充节点：人工实测过的重点节点，每次运行仍会实测，死节点自动不发布。
 # 格式：国家代码|主机|端口  或  sstp://vpn:vpn@主机:端口
+# 目标地区：美/欧/日/新/台（VPN Gate 池内出现即自动纳入动态检测）
 US|vpn680288952.opengw.net|1243
 GB|vpn192018109.opengw.net|1708
 UA|vpn313985146.opengw.net|5555
 MX|cetsssa.opengw.net|992
 IN|vpn393724795.opengw.net|1643
+JP|kanratown.opengw.net|992
+JP|vpn783499452.opengw.net|1502
+JP|vpn222286321.opengw.net|1714
