@@ -189,3 +189,5 @@ A：主要依据 Worker 返回的出口 ASN 与 `is_datacenter` 标记（来自�
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=hezhanleiok/gate&type=Date)](https://star-history.com/#hezhanleiok/gate&Date)
+
+<!-- activated: 2026-11-09T09:34:44.866Z -->
